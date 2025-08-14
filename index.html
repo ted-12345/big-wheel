@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>随机大转盘</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 随机大转盘</h1>
+        
+        <!-- 配置区域 -->
+        <div class="config-section">
+            <div class="config-item">
+                <label for="itemCount">转盘项数：</label>
+                <input type="number" id="itemCount" min="2" max="20" value="6" placeholder="2-20">
+                <button id="generateBtn">生成转盘</button>
+            </div>
+            
+            <!-- 多人协作配置 -->
+            <div class="collaboration-config">
+                <div class="room-info">
+                    <label for="roomId">房间ID：</label>
+                    <input type="text" id="roomId" readonly placeholder="自动生成">
+                    <button id="copyRoomBtn">复制链接</button>
+                    <button id="shareRoomBtn">分享房间</button>
+                </div>
+                <div class="demo-controls">
+                    <button id="demoModeBtn" class="demo-btn">开启演示模式</button>
+                    <span class="demo-info">演示模式会模拟其他奥特曼加入房间</span>
+                </div>
+                <div class="participants">
+                    <h4>参与者 (<span id="participantCount">1</span>)</h4>
+                    <div id="participantList">
+                        <div class="participant-item">
+                            <span class="participant-name">迪迦奥特曼</span>
+                            <span class="participant-status online">在线</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 转盘区域 -->
+        <div class="wheel-container">
+            <div class="wheel" id="wheel">
+                <!-- 转盘项将通过JavaScript动态生成 -->
+            </div>
+            <div class="pointer"></div>
+        </div>
+
+        <!-- 控制按钮 -->
+                        <div class="controls">
+                    <button id="spinBtn" class="spin-btn">开始旋转</button>
+                    <button id="stopBtn" class="stop-btn" disabled>停止</button>
+                </div>
+
+        <!-- 结果显示 -->
+        <div class="result" id="result">
+            <h3>结果：<span id="resultText">等待旋转...</span></h3>
+            <div class="collaboration-status" id="collaborationStatus">
+                <div class="current-operator">
+                    <span>当前操作者：</span>
+                    <span id="currentOperator">迪迦奥特曼</span>
+                </div>
+                <div class="waiting-status" id="waitingStatus" style="display: none;">
+                    <span>⏳ 等待其他参与者操作...</span>
+                </div>
+            </div>
+            <div class="debug-info" id="debugInfo" style="display: none;">
+                <h4>调试信息：</h4>
+                <div id="debugText"></div>
+            </div>
+        </div>
+
+        <!-- 项目编辑区域 -->
+        <div class="edit-section" id="editSection">
+            <h3>编辑转盘项目</h3>
+            <div id="itemInputs">
+                <!-- 项目输入框将通过JavaScript动态生成 -->
+            </div>
+            <button id="saveItemsBtn">保存项目</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 

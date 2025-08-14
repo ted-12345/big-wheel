@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket连接测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .connecting {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 WebSocket连接测试</h1>
+        
+        <div id="status" class="status disconnected">
+            🔴 未连接
+        </div>
+        
+        <div>
+            <label>服务器地址：</label>
+            <input type="text" id="serverUrl" value="ws://localhost:8080" style="width: 300px;">
+            <button onclick="connect()">连接</button>
+            <button onclick="disconnect()" disabled>断开</button>
+        </div>
+        
+        <div style="margin: 20px 0;">
+            <h3>测试消息</h3>
+            <input type="text" id="messageInput" placeholder="输入测试消息" style="width: 200px;">
+            <button onclick="sendMessage()" disabled>发送</button>
+            <button onclick="sendTestData()" disabled>发送测试数据</button>
+        </div>
+        
+        <div>
+            <h3>连接日志</h3>
+            <div id="log" class="log"></div>
+            <button onclick="clearLog()">清空日志</button>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        let isConnected = false;
+
+        function updateStatus(status, message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${status}`;
+            statusDiv.textContent = message;
+        }
+
+        function addLog(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function connect() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            
+            if (!serverUrl) {
+                alert('请输入服务器地址');
+                return;
+            }
+
+            try {
+                updateStatus('connecting', '🟡 连接中...');
+                addLog(`正在连接到 ${serverUrl}...`);
+                
+                socket = new WebSocket(serverUrl);
+                
+                socket.onopen = () => {
+                    isConnected = true;
+                    updateStatus('connected', '🟢 已连接');
+                    addLog('✅ WebSocket连接成功');
+                    
+                    // 启用按钮
+                    document.querySelector('button[onclick="disconnect()"]').disabled = false;
+                    document.querySelector('button[onclick="sendMessage()"]').disabled = false;
+                    document.querySelector('button[onclick="sendTestData()"]').disabled = false;
+                };
+                
+                socket.onmessage = (event) => {
+                    addLog(`📨 收到消息: ${event.data}`);
+                };
+                
+                socket.onclose = () => {
+                    isConnected = false;
+                    updateStatus('disconnected', '🔴 连接已断开');
+                    addLog('❌ WebSocket连接已断开');
+                    
+                    // 禁用按钮
+                    document.querySelector('button[onclick="disconnect()"]').disabled = true;
+                    document.querySelector('button[onclick="sendMessage()"]').disabled = true;
+                    document.querySelector('button[onclick="sendTestData()"]').disabled = true;
+                };
+                
+                socket.onerror = (error) => {
+                    addLog(`❌ WebSocket错误: ${error}`);
+                };
+                
+            } catch (error) {
+                addLog(`❌ 连接失败: ${error.message}`);
+                updateStatus('disconnected', '🔴 连接失败');
+            }
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.close();
+                addLog('🔌 主动断开连接');
+            }
+        }
+
+        function sendMessage() {
+            if (!isConnected || !socket) {
+                alert('请先连接WebSocket');
+                return;
+            }
+            
+            const message = document.getElementById('messageInput').value;
+            if (!message) {
+                alert('请输入消息内容');
+                return;
+            }
+            
+            socket.send(message);
+            addLog(`📤 发送消息: ${message}`);
+            document.getElementById('messageInput').value = '';
+        }
+
+        function sendTestData() {
+            if (!isConnected || !socket) {
+                alert('请先连接WebSocket');
+                return;
+            }
+            
+            const testData = {
+                type: 'join_room',
+                roomId: 'TEST123',
+                participant: {
+                    name: '测试用户',
+                    isHost: true
+                },
+                timestamp: Date.now()
+            };
+            
+            socket.send(JSON.stringify(testData));
+            addLog(`📤 发送测试数据: ${JSON.stringify(testData)}`);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // 页面加载时自动连接（如果服务器地址是localhost）
+        window.onload = () => {
+            const serverUrl = document.getElementById('serverUrl').value;
+            if (serverUrl.includes('localhost')) {
+                setTimeout(() => {
+                    addLog('🔄 自动尝试连接本地服务器...');
+                    connect();
+                }, 1000);
+            }
+        };
+    </script>
+</body>
+</html>
