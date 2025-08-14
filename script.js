@@ -92,9 +92,6 @@ class LuckyWheel {
         this.initCollaboration();
         // 启用WebSocket以支持跨设备实时同步
         this.initWebSocket();
-        // 加入房间，等待服务端分配身份
-        const joinWhenOpen = () => this.joinRoom(this.roomId);
-        setTimeout(joinWhenOpen, 200);
     }
 
     // 生成房间ID
@@ -144,6 +141,13 @@ class LuckyWheel {
                 this.isConnected = true;
                 this.reconnectAttempts = 0;
                 this.showSuccess('🟢 已连接到服务器，实时同步已开启');
+                // 心跳保活：每25秒发送一次ping
+                if (this._hb) {
+                    clearInterval(this._hb);
+                }
+                this._hb = setInterval(() => {
+                    this.sendMessage('ping', { from: this.myName || 'unknown' });
+                }, 25000);
                 this.joinRoom(this.roomId);
                 this.updateConnectionStatus();
             };
@@ -172,6 +176,10 @@ class LuckyWheel {
             
             this.socket.onclose = () => {
                 this.isConnected = false;
+                if (this._hb) {
+                    clearInterval(this._hb);
+                    this._hb = null;
+                }
                 this.updateConnectionStatus();
                 
                 if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -601,8 +609,6 @@ class LuckyWheel {
             const isOperator = this.currentOperator === this.myName;
             if (isOperator) {
                 this.startSpin();
-                // 通知服务器开始旋转（用于观众端显示“旋转中”）
-                this.sendMessage('start_spin', { operator: this.myName });
             } else {
                 this.showError('当前为房主（迪迦奥特曼）操作，您为观众');
             }
@@ -907,9 +913,9 @@ class LuckyWheel {
         document.getElementById('spinBtn').disabled = true;
         document.getElementById('stopBtn').disabled = false;
         
-        // 发送开始旋转消息到服务器
+        // 发送开始旋转消息到服务器（统一在此处发送一次）
         this.sendMessage('start_spin', {
-            operator: this.currentOperator
+            operator: this.myName
         });
         
         // 随机旋转角度 (至少转3圈)

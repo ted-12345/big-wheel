@@ -113,6 +113,11 @@ wss.on('connection', (ws) => {
                         currentOperator: data.operator
                     });
                     break;
+                case 'ping':
+                    try {
+                        ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+                    } catch {}
+                    break;
                     
                 default:
                     console.log('❓ 未知消息类型:', data.type);
