@@ -10,9 +10,10 @@ const server = http.createServer((req, res) => {
 // 创建WebSocket服务器
 const wss = new WebSocket.Server({ server });
 
-// 存储房间信息
-const rooms = new Map(); // roomId -> Set of WebSocket connections
-const participants = new Map(); // WebSocket -> participant info
+// 存储房间信息（简单版）
+// rooms: roomId -> Set<WebSocket>
+const rooms = new Map();
+const participants = new Map(); // WebSocket -> { name, roomId, isHost }
 
 console.log('🚀 WebSocket服务器启动中...');
 
@@ -28,41 +29,37 @@ wss.on('connection', (ws) => {
             console.log('📨 收到消息:', data);
             
             switch (data.type) {
-                case 'join_room':
-                    currentRoom = data.roomId;
-                    participantName = data.participant.name;
-                    
-                    // 存储参与者信息
-                    participants.set(ws, {
-                        name: participantName,
-                        roomId: currentRoom,
-                        isHost: data.participant.isHost
-                    });
-                    
-                    // 创建房间或加入房间
-                    if (!rooms.has(currentRoom)) {
-                        rooms.set(currentRoom, new Set());
-                        console.log(`🏠 创建房间: ${currentRoom}`);
-                    }
-                    rooms.get(currentRoom).add(ws);
-                    
-                    // 通知房间内其他用户有新参与者加入
-                    broadcastToRoom(currentRoom, ws, {
-                        type: 'participant_joined',
-                        name: participantName,
-                        timestamp: Date.now()
-                    });
-                    
-                    // 发送房间数据给新加入的用户
-                    const roomData = getRoomData(currentRoom);
-                    ws.send(JSON.stringify({
-                        type: 'room_joined',
-                        roomData: roomData,
-                        timestamp: Date.now()
-                    }));
-                    
-                    console.log(`👋 ${participantName} 加入房间 ${currentRoom}`);
-                    break;
+            case 'join_room': {
+                currentRoom = data.roomId;
+                participantName = data.participant && data.participant.name ? data.participant.name : '游客';
+
+                if (!rooms.has(currentRoom)) {
+                    rooms.set(currentRoom, new Set());
+                    console.log(`🏠 创建房间: ${currentRoom}`);
+                }
+                rooms.get(currentRoom).add(ws);
+
+                // 存储参与者信息
+                participants.set(ws, { name: participantName, roomId: currentRoom, isHost: !!(data.participant && data.participant.isHost) });
+
+                // 通知房间内其他用户
+                broadcastToRoom(currentRoom, ws, {
+                    type: 'participant_joined',
+                    name: participantName,
+                    timestamp: Date.now()
+                });
+
+                // 发送房间数据给新加入的用户
+                const roomData = getRoomData(currentRoom);
+                ws.send(JSON.stringify({
+                    type: 'room_joined',
+                    roomData,
+                    timestamp: Date.now()
+                }));
+
+                console.log(`👋 ${participantName} 加入房间 ${currentRoom}`);
+                break;
+            }
                     
                 case 'start_spin':
                     // 转发开始旋转消息
@@ -74,8 +71,8 @@ wss.on('connection', (ws) => {
                     break;
                     
                 case 'stop_spin':
-                    // 转发停止旋转消息
-                    broadcastToRoom(currentRoom, ws, {
+                // 转发停止旋转消息
+                broadcastToRoom(currentRoom, ws, {
                         type: 'wheel_spun',
                         rotation: data.rotation,
                         result: data.result,
@@ -84,25 +81,23 @@ wss.on('connection', (ws) => {
                     });
                     
                     // 更新房间数据
-                    updateRoomData(currentRoom, {
-                        currentRotation: data.rotation,
-                        lastResult: data.result,
-                        lastOperator: data.operator
-                    });
+                updateRoomData(currentRoom, {
+                    currentRotation: data.rotation,
+                    lastResult: data.result,
+                    lastOperator: data.operator
+                });
                     break;
                     
                 case 'items_updated':
-                    // 转发项目更新消息
-                    broadcastToRoom(currentRoom, ws, {
+                // 转发项目更新消息
+                broadcastToRoom(currentRoom, ws, {
                         type: 'items_updated',
                         items: data.items,
                         timestamp: Date.now()
                     });
                     
                     // 更新房间数据
-                    updateRoomData(currentRoom, {
-                        items: data.items
-                    });
+                updateRoomData(currentRoom, { items: data.items });
                     break;
                     
                 case 'operator_changed':
@@ -160,24 +155,21 @@ wss.on('connection', (ws) => {
 // 广播消息给房间内其他用户
 function broadcastToRoom(roomId, excludeWs, message) {
     if (rooms.has(roomId)) {
-        const room = rooms.get(roomId);
+        const clients = rooms.get(roomId);
         let sentCount = 0;
-        
-        room.forEach((client) => {
+        clients.forEach((client) => {
             if (client !== excludeWs && client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify(message));
                 sentCount++;
             }
         });
-        
         console.log(`📤 向房间 ${roomId} 广播消息，发送给 ${sentCount} 个用户`);
     }
 }
 
 // 获取房间数据
 function getRoomData(roomId) {
-    // 这里可以从数据库获取房间数据
-    // 目前返回默认数据
+    // 这里可以从数据库获取房间数据（简化）
     return {
         items: ['项目1', '项目2', '项目3', '项目4', '项目5', '项目6'],
         currentRotation: 0,

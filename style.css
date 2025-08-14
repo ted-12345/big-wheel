@@ -358,43 +358,7 @@ h1 {
     font-style: italic;
 }
 
-.room-info {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-}
-
-.room-info label {
-    font-weight: bold;
-    color: #1976d2;
-}
-
-.room-info input {
-    padding: 10px 15px;
-    border: 2px solid #2196f3;
-    border-radius: 8px;
-    font-size: 16px;
-    width: 200px;
-    background: #fff;
-    color: #333;
-}
-
-.room-info button {
-    padding: 8px 16px;
-    background: #2196f3;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background 0.3s;
-}
-
-.room-info button:hover {
-    background: #1976d2;
-}
+/* room-info 相关已移除 */
 
 .participants h4 {
     color: #1976d2;

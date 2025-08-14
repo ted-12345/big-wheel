@@ -7,17 +7,21 @@ class LuckyWheel {
         this.currentRotation = 0;
         this.spinInterval = null;
         
-        // 多人协作相关属性
-        this.roomId = this.generateRoomId();
+        // 多人协作相关属性（统一链接：所有人进入同一房间）
+        this.roomId = 'GLOBAL_ROOM';
         this.participants = new Map();
         this.currentOperator = null;
-        this.isHost = true;
+        this.isHost = false;
         this.syncInterval = null;
+        this.myName = null;
         
         // WebSocket相关属性
         this.socket = null;
         this.isConnected = false;
-        this.serverUrl = 'wss://echo.websocket.org'; // 使用免费的WebSocket测试服务
+        // Render 线上 WebSocket 服务地址
+        this.serverUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+            ? 'ws://localhost:8080'
+            : 'wss://big-wheel.onrender.com';
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
         
@@ -34,12 +38,63 @@ class LuckyWheel {
         this.init();
     }
 
+    // 发送消息到服务器（安全封装）
+    sendMessage(type, payload = {}) {
+        try {
+            if (!this.socket || !this.isConnected || this.socket.readyState !== WebSocket.OPEN) {
+                return;
+            }
+            const message = {
+                type,
+                roomId: this.roomId,
+                timestamp: Date.now(),
+                ...payload
+            };
+            this.socket.send(JSON.stringify(message));
+        } catch (e) {
+            console.error('发送消息失败:', e);
+        }
+    }
+
+    // 同步转盘项目（观众端或全体刷新）
+    syncWheelItems(items) {
+        try {
+            if (!Array.isArray(items)) return;
+            this.items = items;
+            this.updateWheelTexts();
+            this.generateItemInputs();
+        } catch (e) {
+            console.error('同步项目失败:', e);
+        }
+    }
+
+    // 同步房间数据（新加入用户获取快照）
+    syncRoomData(roomData) {
+        try {
+            if (!roomData) return;
+            this.items = roomData.items || this.items;
+            this.currentRotation = roomData.currentRotation || 0;
+            const op = roomData.currentOperator || '迪迦奥特曼';
+            this.setCurrentOperator(op);
+            this.generateWheel();
+            this.generateItemInputs();
+            this.updateWheelTexts();
+            this.wheel.style.transform = `rotate(${this.currentRotation}deg)`;
+        } catch (e) {
+            console.error('同步房间数据失败:', e);
+        }
+    }
+
     init() {
         this.bindEvents();
         this.generateWheel();
         this.generateItemInputs();
         this.initCollaboration();
-        this.initWebSocket(); // 初始化WebSocket连接
+        // 启用WebSocket以支持跨设备实时同步
+        this.initWebSocket();
+        // 加入房间，等待服务端分配身份
+        const joinWhenOpen = () => this.joinRoom(this.roomId);
+        setTimeout(joinWhenOpen, 200);
     }
 
     // 生成房间ID
@@ -54,17 +109,29 @@ class LuckyWheel {
 
     // 初始化多人协作
     initCollaboration() {
-        // 设置房间ID
-        document.getElementById('roomId').value = this.roomId;
-        
-        // 房主默认为迪迦奥特曼
-        this.usedUltramanNames.add('迪迦奥特曼');
-        this.addParticipant('迪迦奥特曼', true);
-        
-        // 设置自己为当前操作者
+        // 本地决定身份（恢复：首个为迪迦，后续随机），无需服务端分配
+        const assigned = localStorage.getItem('my_ultraman_name');
+        if (assigned) {
+            this.myName = assigned;
+        } else {
+            const existingSnapshot = localStorage.getItem('global_room_snapshot');
+            if (!existingSnapshot) {
+                this.myName = '迪迦奥特曼';
+                localStorage.setItem('global_room_snapshot', JSON.stringify({ owner: this.myName, createdAt: Date.now() }));
+            } else {
+                this.myName = this.generateUltramanId();
+            }
+            localStorage.setItem('my_ultraman_name', this.myName);
+        }
+
+        // 加入本地参与者列表
+        this.addParticipant(this.myName, true);
+        this.showSuccess(`${this.myName} 加入了房间`);
+
+        // 设置操作者：首位为“迪迦奥特曼”
         this.setCurrentOperator('迪迦奥特曼');
-        
-        // 开始同步
+
+        // 本地快照同步（避免刷新丢失）
         this.startSync();
     }
 
@@ -83,10 +150,23 @@ class LuckyWheel {
             
             this.socket.onmessage = (event) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    this.handleServerMessage(data);
+                    const raw = event.data;
+                    // 仅解析JSON格式的数据，忽略Render可能返回的文本帧（如 "Request served by ..."）
+                    if (typeof raw === 'string') {
+                        const trimmed = raw.trim();
+                        if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
+                            return; // 非JSON消息忽略
+                        }
+                        const data = JSON.parse(trimmed);
+                        this.handleServerMessage(data);
+                    } else {
+                        // 非字符串类型（如Blob/ArrayBuffer），直接忽略或后续扩展为二进制协议
+                        return;
+                    }
                 } catch (error) {
-                    console.error('解析服务器消息失败:', error);
+                    // 忽略非JSON格式消息
+                    // console.debug('忽略非JSON服务器消息');
+                    return;
                 }
             };
             
@@ -145,7 +225,7 @@ class LuckyWheel {
         }
     }
 
-    // 处理服务器消息
+        // 处理服务器消息（如无后端，可忽略）
     handleServerMessage(data) {
         console.log('收到服务器消息:', data);
         
@@ -167,9 +247,23 @@ class LuckyWheel {
                 this.showSuccess(`🎮 ${data.operator} 成为当前操作者`);
                 break;
                 
+            case 'wheel_spin_started':
+                if (data.operator !== this.myName) {
+                    document.getElementById('resultText').textContent = '旋转中...';
+                }
+                break;
+
             case 'wheel_spun':
-                if (data.operator !== '迪迦奥特曼') {
-                    this.syncWheelRotation(data.rotation, data.result);
+                if (data.operator !== this.myName) {
+                    // 观众端应用房主广播的旋转角度与结果
+                    this.currentRotation = data.rotation;
+                    this.wheel.style.transform = `rotate(${data.rotation}deg)`;
+                    document.getElementById('resultText').textContent = data.result;
+                    // 动画过渡
+                    this.wheel.style.transition = 'transform 0.5s ease-out';
+                    setTimeout(() => {
+                        this.wheel.style.transition = 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
+                    }, 500);
                 }
                 break;
                 
@@ -179,7 +273,10 @@ class LuckyWheel {
                 break;
                 
             case 'room_joined':
-                this.syncRoomData(data.roomData);
+                // 简化：仅同步房间状态（身份由本地决定）
+                if (data.roomData) {
+                    this.syncRoomData(data.roomData);
+                }
                 break;
         }
     }
@@ -265,14 +362,19 @@ class LuckyWheel {
         const stopBtn = document.getElementById('stopBtn');
         const waitingStatus = document.getElementById('waitingStatus');
         
-        if (name === '迪迦奥特曼') {
-            spinBtn.disabled = this.isSpinning;
-            stopBtn.disabled = !this.isSpinning;
-            waitingStatus.style.display = 'none';
-        } else {
+        // 仅当前操作者可操作（由 currentOperator 与 myName 比较）
+        const isOperator = name === this.myName;
+        
+        spinBtn.disabled = this.isSpinning ? true : false;
+        stopBtn.disabled = this.isSpinning ? false : true;
+        
+        // 如果不是操作者且为多人模式，禁用按钮并显示等待
+        if (!isOperator) {
             spinBtn.disabled = true;
             stopBtn.disabled = true;
             waitingStatus.style.display = 'block';
+        } else {
+            waitingStatus.style.display = 'none';
         }
         
         this.updateParticipantList();
@@ -325,8 +427,8 @@ class LuckyWheel {
 
     // 获取分享链接
     getShareLink() {
-        const baseUrl = window.location.origin + window.location.pathname;
-        return `${baseUrl}?room=${this.roomId}`;
+        // 统一链接：直接返回当前地址
+        return window.location.href.split('?')[0];
     }
 
     // 复制房间链接
@@ -364,16 +466,15 @@ class LuckyWheel {
 
     // 加入房间
     joinRoom(roomId) {
-        if (this.socket && this.isConnected) {
+        if (this.socket && this.isConnected && this.socket.readyState === WebSocket.OPEN) {
             const message = {
                 type: 'join_room',
-                roomId: roomId,
+                roomId: roomId || this.roomId,
                 participant: {
-                    name: '迪迦奥特曼',
-                    isHost: this.isHost
+                    name: this.myName,
+                    isHost: this.myName === '迪迦奥特曼'
                 }
             };
-            
             this.socket.send(JSON.stringify(message));
             console.log('发送加入房间消息:', message);
         }
@@ -496,14 +597,23 @@ class LuckyWheel {
         });
 
         document.getElementById('spinBtn').addEventListener('click', () => {
-            if (!this.isSpinning && this.currentOperator === '迪迦奥特曼') {
+            if (this.isSpinning) return;
+            const isOperator = this.currentOperator === this.myName;
+            if (isOperator) {
                 this.startSpin();
+                // 通知服务器开始旋转（用于观众端显示“旋转中”）
+                this.sendMessage('start_spin', { operator: this.myName });
+            } else {
+                this.showError('当前为房主（迪迦奥特曼）操作，您为观众');
             }
         });
 
         document.getElementById('stopBtn').addEventListener('click', () => {
-            if (this.isSpinning && this.currentOperator === '迪迦奥特曼') {
+            if (!this.isSpinning) return;
+            const isOperator = this.currentOperator === this.myName;
+            if (isOperator) {
                 this.stopSpin();
+                // stopSpin 内部会计算结果，这里在stopSpin结束后发送
             }
         });
 
@@ -512,13 +622,7 @@ class LuckyWheel {
         });
 
         // 多人协作相关事件
-        document.getElementById('copyRoomBtn').addEventListener('click', () => {
-            this.copyRoomLink();
-        });
-
-        document.getElementById('shareRoomBtn').addEventListener('click', () => {
-            this.shareRoom();
-        });
+        // copyRoomBtn / shareRoomBtn 已移除
 
         // 演示模式控制
         document.getElementById('demoModeBtn').addEventListener('click', () => {
@@ -821,9 +925,14 @@ class LuckyWheel {
         this.currentRotation = finalRotation;
         
         // 应用旋转动画
-        this.wheel.style.transform = `rotate(${finalRotation}deg)`;
+        const wheelEl = this.wheel;
+        // 确保过渡样式存在
+        if (wheelEl && wheelEl.style) {
+            wheelEl.style.transition = 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
+            wheelEl.style.transform = `rotate(${finalRotation}deg)`;
+        }
         
-        // 4秒后自动停止
+        // 4秒后自动停止（若仍在旋转）
         setTimeout(() => {
             if (this.isSpinning) {
                 this.stopSpin();
@@ -845,11 +954,11 @@ class LuckyWheel {
         const result = this.calculateResult();
         document.getElementById('resultText').textContent = result;
         
-        // 发送停止旋转消息到服务器
+        // 发送停止旋转消息到服务器（房主广播给观众）
         this.sendMessage('stop_spin', {
             rotation: this.currentRotation,
             result: result,
-            operator: this.currentOperator
+            operator: this.myName
         });
         
         // 添加结果高亮效果

@@ -18,26 +18,15 @@
                 <button id="generateBtn">生成转盘</button>
             </div>
             
-            <!-- 多人协作配置 -->
+            <!-- 多人协作配置（精简：统一链接，全体加入同一房间） -->
             <div class="collaboration-config">
-                <div class="room-info">
-                    <label for="roomId">房间ID：</label>
-                    <input type="text" id="roomId" readonly placeholder="自动生成">
-                    <button id="copyRoomBtn">复制链接</button>
-                    <button id="shareRoomBtn">分享房间</button>
-                </div>
                 <div class="demo-controls">
                     <button id="demoModeBtn" class="demo-btn">开启演示模式</button>
                     <span class="demo-info">演示模式会模拟其他奥特曼加入房间</span>
                 </div>
                 <div class="participants">
                     <h4>参与者 (<span id="participantCount">1</span>)</h4>
-                    <div id="participantList">
-                        <div class="participant-item">
-                            <span class="participant-name">迪迦奥特曼</span>
-                            <span class="participant-status online">在线</span>
-                        </div>
-                    </div>
+                    <div id="participantList"></div>
                 </div>
             </div>
         </div>
